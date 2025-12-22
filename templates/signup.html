@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Create Profile — Env Health & Safety</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="card" style="max-width:500px; margin:40px auto;">
+  <h2>Create Your Health Profile</h2>
+
+  {% if error %}
+    <p style="color:#ef4444; font-weight:bold;">
+      {{ error }}
+    </p>
+  {% endif %}
+
+  <form method="POST">
+
+    <label>Full Name</label>
+    <input name="name" placeholder="Your name" required>
+
+    <label>Email</label>
+    <input name="email" type="email" placeholder="you@example.com" required>
+
+    <label>Age</label>
+    <input name="age" type="number" min="1" max="120" required>
+
+    <label>Respiratory Conditions (if any)</label>
+    <div style="margin-bottom:10px;">
+      <label><input type="checkbox" name="conditions" value="asthma"> Asthma</label><br>
+      <label><input type="checkbox" name="conditions" value="bronchitis"> Chronic Bronchitis</label><br>
+      <label><input type="checkbox" name="conditions" value="copd"> COPD</label>
+    </div>
+
+    <button type="submit" style="width:100%;">
+      Create Profile
+    </button>
+  </form>
+
+  <p style="margin-top:15px; font-size:0.85rem; color:#94a3b8;">
+    ⚠ This system provides awareness-based guidance only and does not replace medical advice.
+  </p>
+
+  <p style="margin-top:10px;">
+    <a href="/">← Back to Dashboard</a>
+  </p>
+</div>
+
+</body>
+</html>
