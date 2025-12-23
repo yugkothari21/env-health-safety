@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Env Health & Safety — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 
@@ -19,25 +20,46 @@
   </div>
 </header>
 
-<!-- CONTROLS -->
 <div class="controls">
   <label>City <input id="city" value="Pune"></label>
   <button id="btnGet">Use GPS</button>
   <button id="btnManual">Manual</button>
+  <button id="btnPdf" style="background-color:#8b5cf6; margin-left:auto;">📄 Download Report</button>
 </div>
 
-<div id="status" class="status" aria-live="polite">Idle</div>
+<div id="status" class="status" aria-live="polite">System Idle</div>
 
-<!-- ALERT -->
 <div id="alertBox" role="alertdialog" aria-modal="true" tabindex="-1" style="display:none">
   <p id="alertMsg"></p>
   <button onclick="closeAlert()">OK</button>
 </div>
 
-<!-- RESULTS -->
+<div id="safety-tools" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1.5rem; margin-bottom:1.5rem;">
+
+<section class="card">
+  <h2 style="color:#ef4444;">📢 Report Hazard</h2>
+  <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+    <input id="hazType" placeholder="Hazard Type (e.g. Fire, Spill, Wiring)">
+    <input id="hazDesc" placeholder="Description of the issue...">
+    <button onclick="submitHazard()" style="background-color:#ef4444; color:white; border:none;">Submit Report</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2 style="color:#10b981;">🤖 Safety AI Bot</h2>
+  <div id="chatLog" style="height:120px; overflow-y:auto; background:rgba(0,0,0,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:0.9rem;">
+    <div style="color:#888;"><i>Ask me about Fire, Medical, or Chemical safety...</i></div>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <input id="chatInput" placeholder="Ask a question..." style="flex:1;">
+    <button onclick="askBot()" style="background-color:#10b981; color:white; border:none;">Send</button>
+  </div>
+</section>
+
+</div>
+
 <div id="results" hidden>
 
-<!-- ENVIRONMENT -->
 <section class="card">
   <h2>🌍 Environment</h2>
   <p>Temperature: <b><span id="tempVal"></span> °C</b></p>
@@ -45,7 +67,6 @@
   <p>Pressure: <b><span id="presVal"></span> hPa</b></p>
 </section>
 
-<!-- HEAT -->
 <section class="card">
   <h2>🌡 Heat Stress</h2>
   <p>Heat Index: <b><span id="heatIndexVal"></span> °C</b></p>
@@ -54,85 +75,90 @@
   <canvas id="heatChart" width="320" height="120"></canvas>
 </section>
 
-<!-- OXYGEN -->
 <section class="card">
   <h2>🏔 Altitude & Oxygen</h2>
   <p>Altitude: <b><span id="altitudeVal"></span> m</b></p>
   <p>Oxygen: <b><span id="oxygenVal"></span> %</b></p>
   <p>Status: <span id="oxygenStatus" class="badge"></span></p>
   <p>Personal Min Oxygen: <b><span id="minOxygenVal"></span> %</b></p>
-  <p>Safe Altitude: <b><span id="safeAltVal"></span> m</b></p>
   <canvas id="oxygenChart" width="320" height="120"></canvas>
 </section>
 
-<!-- LIVE SOUND -->
 <section class="card">
   <h2>🎙 Live Sound Monitoring</h2>
-
   <p>Live Noise Level: <b><span id="liveDb">--</span> dB</b></p>
   <p>Safe Exposure Time: <b><span id="safeTime">--</span></b></p>
-  <p>Safe Distance: <b><span id="safeDistance">--</span></b></p>
-
   <canvas id="spectrum" width="320" height="80"></canvas>
-
   <p id="noiseMsg" aria-live="assertive"></p>
-
-  <button id="startMic">Start Monitoring</button>
-  <button id="stopMic" disabled>Stop</button>
-  <button id="calibrateMic">Calibrate Ambient Noise</button>
+  <div style="margin-top:10px; display:flex; gap:10px;">
+    <button id="startMic">Start</button>
+    <button id="stopMic" disabled>Stop</button>
+    <button id="calibrateMic">Calibrate</button>
+  </div>
 </section>
 
-<!-- RISK -->
-<section class="card">
-  <h2>⚠ Overall Risk</h2>
-  <div class="risk-meter"><div id="riskFill"></div></div>
-  <p id="riskLabel"></p>
+<!-- 🧠 EXPLAINABILITY -->
+<section class="card" id="explainabilityPanel">
+  <h2>🧠 Why am I seeing this?</h2>
+  <ul id="explainList">
+    <li>System is analysing real-time safety parameters.</li>
+  </ul>
+  <p style="font-size:0.85em; color:#6b7280;">
+    Explanations are generated based on environmental thresholds and live sensor data.
+  </p>
+</section>
+
+<!-- 📊 PERSONALIZED HEALTH INSIGHTS -->
+<section class="card" id="insightsPanel">
+  <h2>📊 Personalized Health Insights</h2>
+  <ul id="insightsList">
+    <li>Collecting data to generate personalized insights.</li>
+  </ul>
+  <p style="font-size:0.85em; color:#6b7280;">
+    Insights are derived from recent trends and individual exposure patterns.
+  </p>
 </section>
 
 </div>
 
 <script>
 /* ========== THEME ========== */
-themeToggle.onclick = () =>
-  document.documentElement.classList.toggle("light");
+themeToggle.onclick=()=>document.documentElement.classList.toggle("light");
 
 /* ========== ALERT + SPEECH ========== */
 function speak(text){
-  if (!window.speechSynthesis) return;
-  const msg = new SpeechSynthesisUtterance(text);
-  speechSynthesis.cancel();
-  speechSynthesis.speak(msg);
+  if(!window.speechSynthesis) return;
+  const msg=new SpeechSynthesisUtterance(text);
+  speechSynthesis.cancel(); speechSynthesis.speak(msg);
 }
 function showAlert(msg){
-  alertMsg.textContent = msg;
-  alertBox.style.display = "block";
+  alertMsg.textContent=msg;
+  alertBox.style.display="block";
   speak(msg);
 }
-function closeAlert(){
-  alertBox.style.display = "none";
-}
+function closeAlert(){ alertBox.style.display="none"; }
 
 /* ========== BADGE ========== */
-function setBadge(el, status){
-  el.textContent = status || "Unknown";
-  el.className = "badge";
+function setBadge(el,status){
+  el.textContent=status||"Unknown";
+  el.className="badge";
   if(!status) return;
-  const s = status.toLowerCase();
+  const s=status.toLowerCase();
   if(s.includes("safe")) el.classList.add("safe");
-  else if(s.includes("mild") || s.includes("caution")) el.classList.add("caution");
+  else if(s.includes("mild")||s.includes("caution")) el.classList.add("caution");
   else el.classList.add("danger");
 }
 
-/* ========== CHART ========== */
+/* ========== CHART + HISTORY ========== */
 function drawChart(id,data,color){
-  const c=document.getElementById(id),ctx=c.getContext("2d");
+  const c=document.getElementById(id);
+  c.width=c.parentElement.clientWidth-40;
+  const ctx=c.getContext("2d");
   ctx.clearRect(0,0,c.width,c.height);
-  ctx.strokeStyle=color; ctx.beginPath();
-  data.forEach((v,i)=>ctx.lineTo(i*(c.width/data.length),c.height-v));
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  data.forEach((v,i)=>ctx.lineTo(i*(c.width/(data.length-1)),c.height-v));
   ctx.stroke();
 }
-
-/* ========== HISTORY ========== */
 function saveHistory(k,v){
   let a=JSON.parse(localStorage.getItem(k)||"[]");
   a.push(v); if(a.length>20) a.shift();
@@ -157,115 +183,48 @@ async function callApi(params){
   altitudeVal.textContent=j.current_altitude_m;
   oxygenVal.textContent=j.oxygen_percent;
   minOxygenVal.textContent=j.personal_min_oxygen;
-  safeAltVal.textContent=j.max_safe_altitude_m;
   setBadge(oxygenStatus,j.oxygen_status);
 
   drawChart("heatChart",saveHistory("h",j.heat_index),"#f87171");
   drawChart("oxygenChart",saveHistory("o",j.oxygen_percent),"#34d399");
 
-  let risk=0;
-  if(j.heat_level==="Danger") risk+=40;
-  if(j.oxygen_status==="High Risk") risk+=40;
+  updateExplainability(
+    parseInt(liveDb.textContent)||0,
+    j.oxygen_percent,
+    j.heat_level
+  );
 
-  riskFill.style.width=risk+"%";
-  riskLabel.textContent=risk<30?"Low Risk":risk<60?"Moderate Risk":"High Risk – Take precautions";
-  if(risk>=60) showAlert("High environmental risk detected");
+  updateInsights(
+    parseInt(liveDb.textContent)||0,
+    j.oxygen_percent,
+    j.heat_index
+  );
 
   status.textContent="Updated";
 }
 
 /* ========== BUTTONS ========== */
-btnGet.onclick=()=>navigator.geolocation.getCurrentPosition(p=>{
-  callApi({lat:p.coords.latitude,lon:p.coords.longitude});
-});
+btnGet.onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.coords.latitude,lon:p.coords.longitude}));
 btnManual.onclick=()=>callApi({city:city.value});
+btnPdf.onclick=()=>window.location.href="/api/download_report";
 
-/* ========== LIVE MIC (FIXED) ========== */
-let audioContext, analyser, dataArray, freqArray, anim;
-let calibrationOffset = 0;
-
-function calcDb(buf){
-  let s=0;
-  for(let i=0;i<buf.length;i++){
-    let v=(buf[i]-128)/128; s+=v*v;
-  }
-  return Math.max(
-    30,
-    Math.round(20*Math.log10(Math.sqrt(s/buf.length))+100) - calibrationOffset
-  );
+/* ========== EXPLAINABILITY LOGIC ========== */
+function updateExplainability(noiseDb,oxygenPercent,heatLevel){
+  const list=explainList; list.innerHTML="";
+  if(noiseDb>=85) list.innerHTML+=`<li>Noise level (${noiseDb} dB) exceeds safe exposure limits.</li>`;
+  if(oxygenPercent&&oxygenPercent<=19) list.innerHTML+=`<li>Oxygen level (${oxygenPercent}%) is below normal atmospheric conditions.</li>`;
+  if(heatLevel&&heatLevel.toLowerCase().includes("danger")) list.innerHTML+=`<li>Heat stress indicators show unsafe thermal conditions.</li>`;
+  if(!list.innerHTML) list.innerHTML="<li>All monitored parameters are within safe limits.</li>";
 }
 
-function drawSpectrum(){
-  const c=document.getElementById("spectrum");
-  const ctx=c.getContext("2d");
-  ctx.clearRect(0,0,c.width,c.height);
-  analyser.getByteFrequencyData(freqArray);
-  const bw=c.width/freqArray.length;
-  freqArray.forEach((v,i)=>{
-    ctx.fillStyle="#38bdf8";
-    ctx.fillRect(i*bw,c.height,v/2,bw-1);
-  });
+/* ========== INSIGHTS LOGIC ========== */
+function updateInsights(noiseDb,oxygenPercent,heatIndex){
+  const list=insightsList; list.innerHTML="";
+  if(noiseDb>=80) list.innerHTML+=`<li>You are frequently exposed to elevated noise levels.</li>`;
+  if(oxygenPercent&&oxygenPercent<=19) list.innerHTML+=`<li>Your oxygen levels tend to drop below normal at higher altitudes.</li>`;
+  if(heatIndex>=40) list.innerHTML+=`<li>Heat stress risk appears higher under current conditions.</li>`;
+  if(!list.innerHTML) list.innerHTML="<li>No concerning patterns detected so far.</li>";
 }
-
-async function startMicHandler(){
-  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-  audioContext=new AudioContext();
-  analyser=audioContext.createAnalyser();
-  analyser.fftSize=256;
-
-  audioContext.createMediaStreamSource(stream).connect(analyser);
-  dataArray=new Uint8Array(analyser.fftSize);
-  freqArray=new Uint8Array(analyser.frequencyBinCount);
-
-  startMicBtn.disabled=true;
-  stopMicBtn.disabled=false;
-  speak("Sound monitoring started");
-  updateMic();
-}
-
-function stopMicHandler(){
-  cancelAnimationFrame(anim);
-  audioContext?.close();
-  startMicBtn.disabled=false;
-  stopMicBtn.disabled=true;
-  speak("Sound monitoring stopped");
-}
-
-function calibrate(){
-  calibrationOffset = liveDb.textContent !== "--"
-    ? parseInt(liveDb.textContent) - 40
-    : 0;
-  showAlert("Calibration complete");
-}
-
-function updateMic(){
-  analyser.getByteTimeDomainData(dataArray);
-  const db=calcDb(dataArray);
-
-  liveDb.textContent=db;
-  safeTime.textContent=db<=85?"8 hours":(8/Math.pow(2,(db-85)/3)).toFixed(2)+" hours";
-  safeDistance.textContent=db<=70?"Safe":"~"+Math.pow(10,(db-70)/20).toFixed(1)+" m";
-  noiseMsg.textContent=db>=85?"⚠ Dangerous noise level!":"Sound level is safe.";
-
-  drawSpectrum();
-
-  if(db>=90){
-    showAlert("Dangerous noise detected. Monitoring stopped.");
-    stopMicHandler();
-    return;
-  }
-
-  anim=requestAnimationFrame(updateMic);
-}
-
-/* BUTTON HOOKS (FIXED) */
-const startMicBtn=document.getElementById("startMic");
-const stopMicBtn=document.getElementById("stopMic");
-const calibrateBtn=document.getElementById("calibrateMic");
-
-startMicBtn.onclick=startMicHandler;
-stopMicBtn.onclick=stopMicHandler;
-calibrateBtn.onclick=calibrate;
 </script>
 
 </div>
