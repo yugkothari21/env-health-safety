@@ -149,13 +149,23 @@ def api_metrics():
         noise_message = get_noise_message(noise_status)
 
         # -------------------------
-        # NEW: AREA RISK DETECTION
+        # NEW: AREA RISK + HAZARD DETAILS
         # -------------------------
         area_risk = "NORMAL"
+        nearby_hazards_data = []
+
         if lat is not None and lon is not None:
             nearby_hazards = get_hazards_nearby(lat, lon)
             if nearby_hazards:
                 area_risk = "HIGH"
+                for h in nearby_hazards:
+                    nearby_hazards_data.append({
+                        "type": h[1],
+                        "description": h[2],
+                        "location": h[4],
+                        "severity": h[6],
+                        "timestamp": h[7]
+                    })
 
         return jsonify({
             "email": email,
@@ -181,7 +191,8 @@ def api_metrics():
             "noise_message": noise_message,
 
             # NEW
-            "area_risk": area_risk
+            "area_risk": area_risk,
+            "nearby_hazards": nearby_hazards_data
         })
 
     except Exception as e:
@@ -205,10 +216,10 @@ def report_hazard():
         critical = ["fire", "gas", "chemical"]
         severity = "HIGH" if haz_type.lower() in critical else "MODERATE"
 
-        # EXISTING FUNCTION (unchanged)
+        # EXISTING STORAGE (UNCHANGED)
         add_hazard(haz_type, desc)
 
-        # NEW EXTENDED STORAGE
+        # EXTENDED STORAGE WITH LOCATION
         add_hazard_extended(
             haz_type,
             desc,
