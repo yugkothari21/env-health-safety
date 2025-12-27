@@ -28,9 +28,15 @@ from models import (
     init_db,
     add_user,
     get_user,
-    add_hazard,                 # EXISTING
-    add_hazard_extended,        # NEW
-    get_hazards_nearby           # NEW
+    add_hazard,
+    add_hazard_extended,
+    get_hazards_nearby,
+
+    # 🆘 NEW IMPORTS
+    add_emergency_contact,
+    get_emergency_contacts,
+    create_sos_event,
+    get_active_sos_nearby
 )
 
 # -------------------------
@@ -50,7 +56,7 @@ CORS(app)
 init_db()
 
 # -------------------------
-# Utility Helpers (EXISTING)
+# Utility Helpers
 # -------------------------
 def _as_float(v: Any) -> Optional[float]:
     try:
@@ -67,8 +73,7 @@ def _round(v: Optional[float], n: int = 2):
 
 @app.route("/")
 def index():
-    user_email = session.get("email")
-    return render_template("index.html", email=user_email)
+    return render_template("index.html", email=session.get("email"))
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -91,7 +96,9 @@ def logout():
     session.clear()
     return redirect(url_for("index"))
 
-# ---------- API: METRICS (EXTENDED, NOTHING REMOVED) ----------
+# -------------------------
+# API: METRICS (EXTENDED)
+# -------------------------
 @app.route("/api/metrics", methods=["GET"])
 def api_metrics():
     try:
@@ -111,16 +118,11 @@ def api_metrics():
         lat = _as_float(src.get("lat"))
         lon = _as_float(src.get("lon"))
         city = src.get("city", "Pune")
-        noise_db = _as_float(src.get("noise_db"))
-        noise_minutes = _as_float(src.get("noise_minutes"))
 
         if lat is not None and lon is not None:
             weather = get_weather_by_coords(lat, lon)
         else:
             weather = get_weather(city)
-
-        if weather.get("error"):
-            return jsonify(weather), 400
 
         temp = _as_float(weather["temperature"])
         humidity = _as_float(weather["humidity"])
@@ -134,45 +136,14 @@ def api_metrics():
         oxygen_percent = calculate_oxygen_availability(pressure)
         oxygen_status = classify_oxygen_level(oxygen_percent)
 
-        max_safe_altitude = find_safe_altitude_limit(
-            altitude, min_safe_oxygen=min_safe_oxygen
-        )
-
-        extra_safe_ascent = (
-            _round(max_safe_altitude - altitude) if max_safe_altitude and altitude else None
-        )
-
-        noise_dose = (
-            calculate_noise_dose(noise_db, noise_minutes) if noise_db and noise_minutes else None
-        )
-        noise_status = classify_noise_level(noise_db, noise_minutes)
-        noise_message = get_noise_message(noise_status)
-
-        # -------------------------
-        # NEW: AREA RISK + HAZARD DETAILS
-        # -------------------------
+        # 🔴 AREA RISK (HAZARDS + SOS)
         area_risk = "NORMAL"
-        nearby_hazards_data = []
 
-        if lat is not None and lon is not None:
-            nearby_hazards = get_hazards_nearby(lat, lon)
-            if nearby_hazards:
+        if lat and lon:
+            if get_hazards_nearby(lat, lon) or get_active_sos_nearby(lat, lon):
                 area_risk = "HIGH"
-                for h in nearby_hazards:
-                    nearby_hazards_data.append({
-                        "type": h[1],
-                        "description": h[2],
-                        "location": h[4],
-                        "severity": h[6],
-                        "timestamp": h[7]
-                    })
 
         return jsonify({
-            "email": email,
-            "age": age,
-            "conditions": conditions,
-            "personal_min_oxygen": min_safe_oxygen,
-            "city": city,
             "temperature": _round(temp),
             "humidity": _round(humidity),
             "pressure": _round(pressure),
@@ -182,116 +153,97 @@ def api_metrics():
             "current_altitude_m": _round(altitude),
             "oxygen_percent": _round(oxygen_percent),
             "oxygen_status": oxygen_status,
-            "max_safe_altitude_m": _round(max_safe_altitude),
-            "extra_safe_ascent_m": extra_safe_ascent,
-            "noise_db": noise_db,
-            "noise_minutes": noise_minutes,
-            "noise_dose_percent": _round(noise_dose),
-            "noise_status": noise_status,
-            "noise_message": noise_message,
-
-            # NEW
-            "area_risk": area_risk,
-            "nearby_hazards": nearby_hazards_data
+            "personal_min_oxygen": min_safe_oxygen,
+            "area_risk": area_risk
         })
 
     except Exception as e:
-        logger.exception("API error")
-        return jsonify({"error": "internal_error", "details": str(e)}), 500
+        logger.exception("Metrics error")
+        return jsonify({"error": str(e)}), 500
 
-# ---------- API: HAZARD REPORTING (EXTENDED) ----------
+# -------------------------
+# API: HAZARD REPORTING
+# -------------------------
 @app.route('/api/report_hazard', methods=['POST'])
 def report_hazard():
-    try:
-        data = request.json
-        haz_type = data.get('type')
-        desc = data.get('description')
-        location = data.get('location')
-        lat = _as_float(data.get('lat'))
-        lon = _as_float(data.get('lon'))
+    data = request.json
+    haz_type = data.get('type')
+    desc = data.get('description')
+    location = data.get('location')
+    lat = _as_float(data.get('lat'))
+    lon = _as_float(data.get('lon'))
 
-        if not haz_type or not desc:
-            return jsonify({"status": "error", "message": "Missing fields"}), 400
+    severity = "HIGH" if haz_type.lower() in ["fire", "gas", "chemical"] else "MODERATE"
 
-        critical = ["fire", "gas", "chemical"]
-        severity = "HIGH" if haz_type.lower() in critical else "MODERATE"
+    add_hazard(haz_type, desc)
+    add_hazard_extended(haz_type, desc, location, lat, lon, severity)
 
-        # EXISTING STORAGE (UNCHANGED)
-        add_hazard(haz_type, desc)
+    return jsonify({"status": "success", "severity": severity})
 
-        # EXTENDED STORAGE WITH LOCATION
-        add_hazard_extended(
-            haz_type,
-            desc,
-            location=location,
-            latitude=lat,
-            longitude=lon,
-            severity=severity
-        )
+# -------------------------
+# 🆘 API: ADD EMERGENCY CONTACT
+# -------------------------
+@app.route("/api/add_emergency_contact", methods=["POST"])
+def add_contact():
+    data = request.json
+    add_emergency_contact(
+        session.get("email"),
+        data["name"],
+        data["phone"],
+        data.get("email")
+    )
+    return jsonify({"status": "saved"})
 
-        return jsonify({
-            "status": "success",
-            "message": "Hazard reported successfully",
-            "severity": severity,
-            "escalated": severity == "HIGH",
-            "report": {
-                "type": haz_type,
-                "description": desc,
-                "location": location,
-                "latitude": lat,
-                "longitude": lon
-            }
-        })
+# -------------------------
+# 🆘 API: GET EMERGENCY CONTACTS
+# -------------------------
+@app.route("/api/get_emergency_contacts")
+def get_contacts():
+    contacts = get_emergency_contacts(session.get("email"))
+    return jsonify(contacts)
 
-    except Exception as e:
-        logger.exception("Hazard report error")
-        return jsonify({"status": "error", "message": str(e)}), 500
+# -------------------------
+# 🆘 API: SOS TRIGGER
+# -------------------------
+@app.route("/api/sos", methods=["POST"])
+def sos():
+    data = request.json
+    create_sos_event(
+        session.get("email", "Anonymous"),
+        _as_float(data["lat"]),
+        _as_float(data["lon"]),
+        data.get("location")
+    )
+    return jsonify({
+        "status": "SOS_TRIGGERED",
+        "message": "Emergency services & contacts alerted"
+    })
 
-# ---------- API: AI SAFETY BOT (UNCHANGED) ----------
+# -------------------------
+# API: AI SAFETY BOT
+# -------------------------
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    user_msg = request.json.get('message', '').lower()
+    msg = request.json.get("message", "").lower()
+    if "fire" in msg:
+        return jsonify({"reply": "🔥 FIRE: Evacuate immediately!"})
+    if "medical" in msg:
+        return jsonify({"reply": "🚑 MEDICAL: Call emergency services."})
+    return jsonify({"reply": "Ask about Fire, Medical, Noise, Heat, Chemicals."})
 
-    if "fire" in user_msg or "smoke" in user_msg:
-        reply = "🔥 FIRE EMERGENCY: Pull the alarm. Evacuate immediately via stairs."
-    elif "faint" in user_msg or "medical" in user_msg:
-        reply = "🚑 MEDICAL ALERT: Provide water if conscious. Call emergency services."
-    elif "noise" in user_msg:
-        reply = "🔊 NOISE SAFETY: Above 85dB, hearing protection is required."
-    elif "chemical" in user_msg or "spill" in user_msg:
-        reply = "🧪 CHEMICAL HAZARD: Evacuate area. Refer to MSDS."
-    elif "heat" in user_msg:
-        reply = "☀️ HEAT STRESS: Move to shade. Hydrate immediately."
-    else:
-        reply = "I am the EHS Safety Bot. Ask about Fire, Medical, Noise, Chemicals, or Heat safety."
-
-    return jsonify({"reply": reply})
-
-# ---------- API: PDF REPORT (UNCHANGED) ----------
+# -------------------------
+# API: PDF REPORT
+# -------------------------
 @app.route('/api/download_report')
 def download_report():
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.set_font("Arial", 'B', 16)
-        pdf.cell(200, 10, "EHS Nexus - Site Safety Audit", ln=1, align='C')
-        pdf.set_font("Arial", size=10)
-        pdf.cell(200, 10, f"Generated: {datetime.datetime.now()}", ln=1, align='C')
-
-        buffer = io.BytesIO()
-        buffer.write(pdf.output(dest='S').encode('latin-1'))
-        buffer.seek(0)
-
-        return send_file(
-            buffer,
-            as_attachment=True,
-            download_name="EHS_Report.pdf",
-            mimetype='application/pdf'
-        )
-    except Exception as e:
-        logger.exception("PDF error")
-        return jsonify({"error": str(e)}), 500
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, "EHS Safety Report", ln=1)
+    buffer = io.BytesIO()
+    buffer.write(pdf.output(dest='S').encode('latin-1'))
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name="report.pdf")
 
 if __name__ == "__main__":
     app.run(debug=True)

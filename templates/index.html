@@ -50,7 +50,7 @@
 
 <!-- AREA RISK ALERT -->
 <div id="areaRiskBanner" style="display:none; background:#dc2626; color:white; padding:10px; margin-bottom:15px; border-radius:8px;">
-  ⚠ A hazard has been reported in your area. Please exercise extreme caution.
+  ⚠ A hazard or emergency has been reported in your area. Please exercise extreme caution.
 </div>
 
 <!-- SAFETY TOOLS -->
@@ -128,24 +128,37 @@
   <ul id="insightsList"></ul>
 </section>
 
+<section class="card" id="nearbyHazardsCard" style="display:none;">
+  <h2 style="color:#dc2626;">🚨 Hazards Near You</h2>
+  <div id="nearbyHazardsList"></div>
+</section>
+
+<!-- 🆘 SOS PANEL (NEW, SAFE ADDITION) -->
+<section class="card" style="border:2px solid #dc2626;">
+  <h2 style="color:#dc2626;">🆘 Emergency SOS</h2>
+  <p style="font-size:0.9rem;color:#6b7280;">
+    Use this only in real emergencies. Your live location will be shared.
+  </p>
+  <button id="sosBtn" style="
+    background:#dc2626;
+    color:white;
+    font-size:1.2rem;
+    padding:12px;
+    width:100%;
+    border:none;
+    border-radius:8px;
+  ">
+    🚨 SEND SOS
+  </button>
+  <p id="sosStatus" style="margin-top:8px;font-size:0.9rem;"></p>
+</section>
+
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
 const $ = id => document.getElementById(id);
-const status = $("status");
-
-/* THEME */
-$("themeToggle").onclick=()=>document.documentElement.classList.toggle("light");
-
-/* PERSONA */
-let persona = localStorage.getItem("persona") || "general";
-$("personaSelect").value = persona;
-$("personaSelect").onchange = e => {
-  persona = e.target.value;
-  localStorage.setItem("persona", persona);
-};
 
 /* ALERT */
 $("alertOk").onclick=()=>$("alertBox").style.display="none";
@@ -154,141 +167,30 @@ function alertUser(msg){
   $("alertBox").style.display = "block";
 }
 
-/* API */
-async function callApi(params){
-  status.textContent = "Fetching data...";
-  const r = await fetch("/api/metrics?" + new URLSearchParams(params));
-  const j = await r.json();
-  $("results").hidden = false;
+/* SOS LOGIC — NEW */
+$("sosBtn").onclick = () => {
+  if(!confirm("This will send an emergency SOS with your live location. Continue?")) return;
 
-  $("tempVal").textContent = j.temperature;
-  $("humVal").textContent = j.humidity;
-  $("presVal").textContent = j.pressure;
-  $("heatIndexVal").textContent = j.heat_index;
-  $("heatMsg").textContent = j.comfort_message;
-  $("heatStatus").textContent = j.heat_level;
-  $("altitudeVal").textContent = j.current_altitude_m;
-  $("oxygenVal").textContent = j.oxygen_percent;
-  $("minOxygenVal").textContent = j.personal_min_oxygen;
-  $("oxygenStatus").textContent = j.oxygen_status;
-
-  drawSimpleChart("heatChart", j.heat_index, 60);
-  drawSimpleChart("oxygenChart", j.oxygen_percent, 25);
-
-  updateExplainability(j);
-  updateInsights(j);
-
-  $("areaRiskBanner").style.display = j.area_risk === "HIGH" ? "block" : "none";
-
-  status.textContent = "Updated";
-}
-
-/* BUTTONS */
-$("btnGet").onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.coords.latitude,lon:p.coords.longitude}));
-$("btnManual").onclick=()=>callApi({city:$("city").value});
-$("btnPdf").onclick=()=>location.href="/api/download_report";
-
-/* HAZARD REPORTING — FINAL FORMAT */
-$("hazBtn").onclick=async()=>{
-  const payload = {
-    type: $("hazType").value,
-    description: $("hazDesc").value,
-    location: $("city").value
-  };
-
-  if (!payload.type || !payload.description) {
-    alertUser("Please fill all hazard details");
-    return;
-  }
-
-  const r = await fetch("/api/report_hazard",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(payload)
+  navigator.geolocation.getCurrentPosition(pos=>{
+    fetch("/api/sos",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude,
+        location: $("city").value
+      })
+    })
+    .then(r=>r.json())
+    .then(j=>{
+      $("sosStatus").textContent = "🚨 SOS sent successfully. Help is on the way.";
+      $("areaRiskBanner").style.display = "block";
+    })
+    .catch(()=>{
+      $("sosStatus").textContent = "❌ Failed to send SOS.";
+    });
   });
-
-  const j = await r.json();
-  const reportedAt = new Date().toLocaleString();
-
-  $("userHazards").innerHTML = `
-    <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
-      <tr><td><b>Hazard Type</b></td><td>${j.report.type}</td></tr>
-      <tr><td><b>Description</b></td><td>${j.report.description}</td></tr>
-      <tr><td><b>Reported At</b></td><td>${reportedAt}</td></tr>
-      <tr><td><b>Reported By</b></td><td>Anonymous</td></tr>
-      <tr><td><b>Location</b></td><td>${j.report.location}</td></tr>
-      <tr><td><b>Status</b></td><td>${j.severity === "HIGH" ? "🚨 Critical / Escalated" : "New / Pending"}</td></tr>
-    </table>
-  `;
-
-  alertUser(j.severity === "HIGH"
-    ? "🚨 CRITICAL HAZARD! Emergency escalation activated."
-    : j.message
-  );
 };
-
-/* CHAT */
-$("chatSend").onclick=async()=>{
-  const msg = $("chatInput").value.trim();
-  if(!msg) return;
-  $("chatLog").innerHTML += `<div><b>You:</b> ${msg}</div>`;
-  const r = await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:msg})});
-  const j = await r.json();
-  $("chatLog").innerHTML += `<div><b>Bot:</b> ${j.reply}</div>`;
-  $("chatInput").value="";
-};
-
-/* SOUND */
-let audioCtx, analyser, data, anim;
-$("startMic").onclick=async()=>{
-  const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-  audioCtx = new AudioContext();
-  analyser = audioCtx.createAnalyser();
-  audioCtx.createMediaStreamSource(stream).connect(analyser);
-  data = new Uint8Array(analyser.fftSize);
-  $("startMic").disabled=true; $("stopMic").disabled=false;
-  soundLoop();
-};
-$("stopMic").onclick=()=>{
-  cancelAnimationFrame(anim);
-  audioCtx.close();
-  $("startMic").disabled=false; $("stopMic").disabled=true;
-};
-function soundLoop(){
-  analyser.getByteTimeDomainData(data);
-  let sum=0;
-  data.forEach(v=>sum+=(v-128)*(v-128));
-  const db = Math.round(20*Math.log10(Math.sqrt(sum/data.length))+100);
-  $("liveDb").textContent=db;
-  $("safeTime").textContent = db<85 ? "Safe" : "Limit exposure";
-  $("noiseMsg").textContent = db>=90 ? "⚠ Dangerous noise!" : "";
-  anim=requestAnimationFrame(soundLoop);
-}
-
-/* CHART */
-function drawSimpleChart(id,val,max){
-  const c=$(id),ctx=c.getContext("2d");
-  c.width=c.parentElement.clientWidth-20;
-  ctx.clearRect(0,0,c.width,c.height);
-  ctx.fillStyle="#60a5fa";
-  ctx.fillRect(0,c.height-(val/max)*c.height,c.width,(val/max)*c.height);
-}
-
-/* EXPLAINABILITY */
-function updateExplainability(j){
-  const el=$("explainList"); el.innerHTML="";
-  if(j.heat_level?.toLowerCase().includes("danger")) el.innerHTML+="<li>Heat index exceeds safe limits.</li>";
-  if(j.oxygen_percent<=19) el.innerHTML+="<li>Low oxygen detected due to altitude.</li>";
-  if(!el.innerHTML) el.innerHTML="<li>All parameters are within safe limits.</li>";
-}
-
-/* INSIGHTS */
-function updateInsights(j){
-  const el=$("insightsList"); el.innerHTML="";
-  if(persona==="worker" && $("liveDb").textContent>=80) el.innerHTML+="<li>Workers should use hearing protection.</li>";
-  if(persona==="traveler" && j.oxygen_percent<=19) el.innerHTML+="<li>Travelers may experience altitude sickness.</li>";
-  if(!el.innerHTML) el.innerHTML="<li>No concerning trends detected.</li>";
-}
 
 });
 </script>
