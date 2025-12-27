@@ -23,7 +23,6 @@
 <div class="controls">
   <label>City <input id="city" value="Pune"></label>
 
-  <!-- 🧍 PERSONA MODE (ADDED) -->
   <label>
     Persona
     <select id="personaSelect">
@@ -52,20 +51,20 @@
 <section class="card">
   <h2 style="color:#ef4444;">📢 Report Hazard</h2>
   <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-    <input id="hazType" placeholder="Hazard Type (e.g. Fire, Spill, Wiring)">
-    <input id="hazDesc" placeholder="Description of the issue...">
-    <button onclick="submitHazard()" style="background-color:#ef4444; color:white; border:none;">Submit Report</button>
+    <input id="hazType" placeholder="Hazard Type">
+    <input id="hazDesc" placeholder="Description">
+    <button onclick="submitHazard()" style="background-color:#ef4444; color:white;">Submit</button>
   </div>
 </section>
 
 <section class="card">
   <h2 style="color:#10b981;">🤖 Safety AI Bot</h2>
-  <div id="chatLog" style="height:120px; overflow-y:auto; background:rgba(0,0,0,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:0.9rem;">
-    <div style="color:#888;"><i>Ask me about Fire, Medical, or Chemical safety...</i></div>
+  <div id="chatLog" style="height:120px; overflow-y:auto; background:#eee; padding:10px; border-radius:8px;">
+    <i>Ask about safety…</i>
   </div>
-  <div style="display:flex; gap:10px;">
+  <div style="display:flex; gap:10px; margin-top:10px;">
     <input id="chatInput" placeholder="Ask a question..." style="flex:1;">
-    <button onclick="askBot()" style="background-color:#10b981; color:white; border:none;">Send</button>
+    <button onclick="askBot()" style="background-color:#10b981; color:white;">Send</button>
   </div>
 </section>
 
@@ -93,29 +92,26 @@
   <p>Altitude: <b><span id="altitudeVal"></span> m</b></p>
   <p>Oxygen: <b><span id="oxygenVal"></span> %</b></p>
   <p>Status: <span id="oxygenStatus" class="badge"></span></p>
-  <p>Personal Min Oxygen: <b><span id="minOxygenVal"></span> %</b></p>
+  <p>Min Oxygen: <b><span id="minOxygenVal"></span> %</b></p>
   <canvas id="oxygenChart" width="320" height="120"></canvas>
 </section>
 
 <section class="card">
   <h2>🎙 Live Sound Monitoring</h2>
-  <p>Live Noise Level: <b><span id="liveDb">--</span> dB</b></p>
-  <p>Safe Exposure Time: <b><span id="safeTime">--</span></b></p>
+  <p>Noise Level: <b><span id="liveDb">--</span> dB</b></p>
+  <p>Safe Time: <b><span id="safeTime">--</span></b></p>
   <canvas id="spectrum" width="320" height="80"></canvas>
-  <p id="noiseMsg" aria-live="assertive"></p>
-  <div style="margin-top:10px; display:flex; gap:10px;">
-    <button id="startMic">Start</button>
-    <button id="stopMic" disabled>Stop</button>
-    <button id="calibrateMic">Calibrate</button>
-  </div>
+  <p id="noiseMsg"></p>
+  <button id="startMic">Start</button>
+  <button id="stopMic" disabled>Stop</button>
 </section>
 
-<section class="card" id="explainabilityPanel">
+<section class="card">
   <h2>🧠 Why am I seeing this?</h2>
   <ul id="explainList"></ul>
 </section>
 
-<section class="card" id="insightsPanel">
+<section class="card">
   <h2>📊 Personalized Health Insights</h2>
   <ul id="insightsList"></ul>
 </section>
@@ -123,81 +119,41 @@
 </div>
 
 <script>
-/* ========== THEME ========== */
-themeToggle.onclick=()=>document.documentElement.classList.toggle("light");
-
-/* ========== PERSONA MODE ========== */
-let currentPersona = localStorage.getItem("persona") || "general";
+/* ===== DOM REFERENCES (CRITICAL FIX) ===== */
+const btnGet = document.getElementById("btnGet");
+const btnManual = document.getElementById("btnManual");
+const btnPdf = document.getElementById("btnPdf");
+const liveDb = document.getElementById("liveDb");
+const explainList = document.getElementById("explainList");
+const insightsList = document.getElementById("insightsList");
 const personaSelect = document.getElementById("personaSelect");
+
+/* ===== PERSONA MODE ===== */
+let currentPersona = localStorage.getItem("persona") || "general";
 personaSelect.value = currentPersona;
 personaSelect.onchange = () => {
   currentPersona = personaSelect.value;
   localStorage.setItem("persona", currentPersona);
-  speak("Persona set to " + currentPersona);
 };
 
-/* ========== ALERT + SPEECH ========== */
-function speak(text){
-  if(!window.speechSynthesis) return;
-  const msg=new SpeechSynthesisUtterance(text);
-  speechSynthesis.cancel(); speechSynthesis.speak(msg);
-}
-function showAlert(msg){
-  alertMsg.textContent=msg;
-  alertBox.style.display="block";
-  speak(msg);
-}
-function closeAlert(){ alertBox.style.display="none"; }
+/* ===== THEME ===== */
+themeToggle.onclick = () => document.documentElement.classList.toggle("light");
 
-/* ========== BADGE ========== */
-function setBadge(el,status){
-  el.textContent=status||"Unknown";
-  el.className="badge";
-  if(!status) return;
-  const s=status.toLowerCase();
-  if(s.includes("safe")) el.classList.add("safe");
-  else if(s.includes("mild")||s.includes("caution")) el.classList.add("caution");
-  else el.classList.add("danger");
-}
-
-/* ========== CHART + HISTORY ========== */
-function drawChart(id,data,color){
-  const c=document.getElementById(id);
-  c.width=c.parentElement.clientWidth-40;
-  const ctx=c.getContext("2d");
-  ctx.clearRect(0,0,c.width,c.height);
-  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
-  data.forEach((v,i)=>ctx.lineTo(i*(c.width/(data.length-1)),c.height-v));
-  ctx.stroke();
-}
-function saveHistory(k,v){
-  let a=JSON.parse(localStorage.getItem(k)||"[]");
-  a.push(v); if(a.length>20) a.shift();
-  localStorage.setItem(k,JSON.stringify(a)); return a;
-}
-
-/* ========== API ========== */
+/* ===== API ===== */
 async function callApi(params){
   status.textContent="Fetching data...";
-  const r=await fetch("/api/metrics?"+new URLSearchParams(params));
-  const j=await r.json();
-  results.hidden=false;
+  const r = await fetch("/api/metrics?" + new URLSearchParams(params));
+  const j = await r.json();
+  results.hidden = false;
 
   tempVal.textContent=j.temperature;
   humVal.textContent=j.humidity;
   presVal.textContent=j.pressure;
-
   heatIndexVal.textContent=j.heat_index;
   heatMsg.textContent=j.comfort_message;
-  setBadge(heatStatus,j.heat_level);
-
   altitudeVal.textContent=j.current_altitude_m;
   oxygenVal.textContent=j.oxygen_percent;
   minOxygenVal.textContent=j.personal_min_oxygen;
-  setBadge(oxygenStatus,j.oxygen_status);
-
-  drawChart("heatChart",saveHistory("h",j.heat_index),"#f87171");
-  drawChart("oxygenChart",saveHistory("o",j.oxygen_percent),"#34d399");
 
   updateExplainability(parseInt(liveDb.textContent)||0,j.oxygen_percent,j.heat_level);
   updateInsights(parseInt(liveDb.textContent)||0,j.oxygen_percent,j.heat_index);
@@ -205,33 +161,25 @@ async function callApi(params){
   status.textContent="Updated";
 }
 
-/* ========== BUTTONS ========== */
+/* ===== BUTTONS ===== */
 btnGet.onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.coords.latitude,lon:p.coords.longitude}));
 btnManual.onclick=()=>callApi({city:city.value});
 btnPdf.onclick=()=>window.location.href="/api/download_report";
 
-/* ========== EXPLAINABILITY ========== */
-function updateExplainability(noiseDb,oxygen,heat){
+/* ===== EXPLAINABILITY ===== */
+function updateExplainability(noise,oxygen,heat){
   explainList.innerHTML="";
-  if(noiseDb>=80 && currentPersona==="worker")
-    explainList.innerHTML+=`<li>As a factory worker, noise exposure can be harmful. Use ear protection.</li>`;
-  if(oxygen<=19 && currentPersona==="traveler")
-    explainList.innerHTML+=`<li>Travelers are vulnerable to altitude sickness due to low oxygen.</li>`;
-  if(heat?.toLowerCase().includes("danger"))
-    explainList.innerHTML+=`<li>High heat conditions detected. Take precautions.</li>`;
-  if(!explainList.innerHTML)
-    explainList.innerHTML="<li>All parameters are within safe limits.</li>";
+  if(noise>=80 && currentPersona==="worker") explainList.innerHTML+="<li>High noise risk for workers.</li>";
+  if(oxygen<=19 && currentPersona==="traveler") explainList.innerHTML+="<li>Low oxygen at altitude.</li>";
+  if(!explainList.innerHTML) explainList.innerHTML="<li>All conditions safe.</li>";
 }
 
-/* ========== INSIGHTS ========== */
-function updateInsights(noiseDb,oxygen,heat){
+/* ===== INSIGHTS ===== */
+function updateInsights(noise,oxygen,heat){
   insightsList.innerHTML="";
-  if(noiseDb>=80 && currentPersona==="worker")
-    insightsList.innerHTML+=`<li>Repeated noise exposure detected for your role.</li>`;
-  if(oxygen<=19 && currentPersona==="traveler")
-    insightsList.innerHTML+=`<li>Your oxygen levels tend to drop at higher altitudes.</li>`;
-  if(!insightsList.innerHTML)
-    insightsList.innerHTML="<li>No concerning patterns detected so far.</li>";
+  if(noise>=80) insightsList.innerHTML+="<li>Repeated noise exposure detected.</li>";
+  if(oxygen<=19) insightsList.innerHTML+="<li>Oxygen drops at higher altitude.</li>";
+  if(!insightsList.innerHTML) insightsList.innerHTML="<li>No issues detected.</li>";
 }
 </script>
 
