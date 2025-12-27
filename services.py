@@ -7,16 +7,16 @@ from typing import Any, Dict, Optional
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError, HTTPError
 
-# Optional constant fallback (you can keep, but prefer setting OPENWEATHER_API_KEY env var)
+
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "4b2048e21cf2a99adc5d4b18960112c1")
 
-# Constants
+
 OWM_BASE = "https://api.openweathermap.org/data/2.5/weather"
 REQUEST_TIMEOUT = 6  # seconds per request
 MAX_RETRIES = 2
 RETRY_BACKOFF = 1.0  # seconds (multiplied each retry)
 
-# Logging
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s - %(message)s")
 logger = logging.getLogger("services")
 

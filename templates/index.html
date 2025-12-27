@@ -22,6 +22,19 @@
 
 <div class="controls">
   <label>City <input id="city" value="Pune"></label>
+
+  <!-- 🧍 PERSONA MODE (ADDED) -->
+  <label>
+    Persona
+    <select id="personaSelect">
+      <option value="general">General User</option>
+      <option value="student">Student</option>
+      <option value="worker">Factory Worker</option>
+      <option value="traveler">Traveler / Trekker</option>
+      <option value="office">Office Worker</option>
+    </select>
+  </label>
+
   <button id="btnGet">Use GPS</button>
   <button id="btnManual">Manual</button>
   <button id="btnPdf" style="background-color:#8b5cf6; margin-left:auto;">📄 Download Report</button>
@@ -97,26 +110,14 @@
   </div>
 </section>
 
-<!-- 🧠 EXPLAINABILITY -->
 <section class="card" id="explainabilityPanel">
   <h2>🧠 Why am I seeing this?</h2>
-  <ul id="explainList">
-    <li>System is analysing real-time safety parameters.</li>
-  </ul>
-  <p style="font-size:0.85em; color:#6b7280;">
-    Explanations are generated based on environmental thresholds and live sensor data.
-  </p>
+  <ul id="explainList"></ul>
 </section>
 
-<!-- 📊 PERSONALIZED HEALTH INSIGHTS -->
 <section class="card" id="insightsPanel">
   <h2>📊 Personalized Health Insights</h2>
-  <ul id="insightsList">
-    <li>Collecting data to generate personalized insights.</li>
-  </ul>
-  <p style="font-size:0.85em; color:#6b7280;">
-    Insights are derived from recent trends and individual exposure patterns.
-  </p>
+  <ul id="insightsList"></ul>
 </section>
 
 </div>
@@ -124,6 +125,16 @@
 <script>
 /* ========== THEME ========== */
 themeToggle.onclick=()=>document.documentElement.classList.toggle("light");
+
+/* ========== PERSONA MODE ========== */
+let currentPersona = localStorage.getItem("persona") || "general";
+const personaSelect = document.getElementById("personaSelect");
+personaSelect.value = currentPersona;
+personaSelect.onchange = () => {
+  currentPersona = personaSelect.value;
+  localStorage.setItem("persona", currentPersona);
+  speak("Persona set to " + currentPersona);
+};
 
 /* ========== ALERT + SPEECH ========== */
 function speak(text){
@@ -188,17 +199,8 @@ async function callApi(params){
   drawChart("heatChart",saveHistory("h",j.heat_index),"#f87171");
   drawChart("oxygenChart",saveHistory("o",j.oxygen_percent),"#34d399");
 
-  updateExplainability(
-    parseInt(liveDb.textContent)||0,
-    j.oxygen_percent,
-    j.heat_level
-  );
-
-  updateInsights(
-    parseInt(liveDb.textContent)||0,
-    j.oxygen_percent,
-    j.heat_index
-  );
+  updateExplainability(parseInt(liveDb.textContent)||0,j.oxygen_percent,j.heat_level);
+  updateInsights(parseInt(liveDb.textContent)||0,j.oxygen_percent,j.heat_index);
 
   status.textContent="Updated";
 }
@@ -208,22 +210,28 @@ btnGet.onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.co
 btnManual.onclick=()=>callApi({city:city.value});
 btnPdf.onclick=()=>window.location.href="/api/download_report";
 
-/* ========== EXPLAINABILITY LOGIC ========== */
-function updateExplainability(noiseDb,oxygenPercent,heatLevel){
-  const list=explainList; list.innerHTML="";
-  if(noiseDb>=85) list.innerHTML+=`<li>Noise level (${noiseDb} dB) exceeds safe exposure limits.</li>`;
-  if(oxygenPercent&&oxygenPercent<=19) list.innerHTML+=`<li>Oxygen level (${oxygenPercent}%) is below normal atmospheric conditions.</li>`;
-  if(heatLevel&&heatLevel.toLowerCase().includes("danger")) list.innerHTML+=`<li>Heat stress indicators show unsafe thermal conditions.</li>`;
-  if(!list.innerHTML) list.innerHTML="<li>All monitored parameters are within safe limits.</li>";
+/* ========== EXPLAINABILITY ========== */
+function updateExplainability(noiseDb,oxygen,heat){
+  explainList.innerHTML="";
+  if(noiseDb>=80 && currentPersona==="worker")
+    explainList.innerHTML+=`<li>As a factory worker, noise exposure can be harmful. Use ear protection.</li>`;
+  if(oxygen<=19 && currentPersona==="traveler")
+    explainList.innerHTML+=`<li>Travelers are vulnerable to altitude sickness due to low oxygen.</li>`;
+  if(heat?.toLowerCase().includes("danger"))
+    explainList.innerHTML+=`<li>High heat conditions detected. Take precautions.</li>`;
+  if(!explainList.innerHTML)
+    explainList.innerHTML="<li>All parameters are within safe limits.</li>";
 }
 
-/* ========== INSIGHTS LOGIC ========== */
-function updateInsights(noiseDb,oxygenPercent,heatIndex){
-  const list=insightsList; list.innerHTML="";
-  if(noiseDb>=80) list.innerHTML+=`<li>You are frequently exposed to elevated noise levels.</li>`;
-  if(oxygenPercent&&oxygenPercent<=19) list.innerHTML+=`<li>Your oxygen levels tend to drop below normal at higher altitudes.</li>`;
-  if(heatIndex>=40) list.innerHTML+=`<li>Heat stress risk appears higher under current conditions.</li>`;
-  if(!list.innerHTML) list.innerHTML="<li>No concerning patterns detected so far.</li>";
+/* ========== INSIGHTS ========== */
+function updateInsights(noiseDb,oxygen,heat){
+  insightsList.innerHTML="";
+  if(noiseDb>=80 && currentPersona==="worker")
+    insightsList.innerHTML+=`<li>Repeated noise exposure detected for your role.</li>`;
+  if(oxygen<=19 && currentPersona==="traveler")
+    insightsList.innerHTML+=`<li>Your oxygen levels tend to drop at higher altitudes.</li>`;
+  if(!insightsList.innerHTML)
+    insightsList.innerHTML="<li>No concerning patterns detected so far.</li>";
 }
 </script>
 
