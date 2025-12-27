@@ -49,7 +49,7 @@
 </div>
 
 <!-- AREA RISK ALERT -->
-<div id="areaRiskBanner" style="display:none; background:#dc2626; color:white; padding:10px; margin-bottom:15px; border-radius:8px;">
+<div id="areaRiskBanner" style="display:none;background:#dc2626;color:white;padding:10px;margin-bottom:15px;border-radius:8px;">
   ⚠ A hazard has been reported in your area. Please exercise extreme caution.
 </div>
 
@@ -128,7 +128,6 @@
   <ul id="insightsList"></ul>
 </section>
 
-<!-- ✅ NEW: NEARBY HAZARDS DISPLAY (ADDED ONLY) -->
 <section class="card" id="nearbyHazardsCard" style="display:none;">
   <h2 style="color:#dc2626;">🚨 Hazards Near You</h2>
   <div id="nearbyHazardsList"></div>
@@ -186,18 +185,11 @@ async function callApi(params){
 
   $("areaRiskBanner").style.display = j.area_risk === "HIGH" ? "block" : "none";
 
-  /* ✅ NEW: SHOW NEARBY HAZARDS */
-  if(j.nearby_hazards && j.nearby_hazards.length > 0){
-    $("nearbyHazardsCard").style.display = "block";
-    $("nearbyHazardsList").innerHTML = j.nearby_hazards.map(h => `
-      <div style="border-bottom:1px solid #ddd;padding:6px 0;">
-        <b>${h.type}</b> — ${h.description}<br>
-        <small>
-          📍 ${h.location || "Unknown location"} |
-          ⚠ ${h.severity} |
-          🕒 ${h.timestamp}
-        </small>
-      </div>
+  if(j.nearby_hazards?.length){
+    $("nearbyHazardsCard").style.display="block";
+    $("nearbyHazardsList").innerHTML = j.nearby_hazards.map(h=>`
+      <div><b>${h.type}</b> — ${h.description}<br>
+      <small>📍 ${h.location||"Unknown"} | ⚠ ${h.severity}</small></div>
     `).join("");
   }
 
@@ -209,42 +201,87 @@ $("btnGet").onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat
 $("btnManual").onclick=()=>callApi({city:$("city").value});
 $("btnPdf").onclick=()=>location.href="/api/download_report";
 
-/* HAZARD REPORTING — GPS ADDED (NO REMOVAL) */
-$("hazBtn").onclick=async()=>{
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const payload = {
-      type: $("hazType").value,
-      description: $("hazDesc").value,
-      location: $("city").value,
-      lat: pos.coords.latitude,
-      lon: pos.coords.longitude
-    };
-
-    fetch("/api/report_hazard",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload)
+/* HAZARD */
+$("hazBtn").onclick=()=>navigator.geolocation.getCurrentPosition(pos=>{
+  fetch("/api/report_hazard",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      type:$("hazType").value,
+      description:$("hazDesc").value,
+      location:$("city").value,
+      lat:pos.coords.latitude,
+      lon:pos.coords.longitude
     })
-    .then(r=>r.json())
-    .then(j=>{
-      const reportedAt = new Date().toLocaleString();
-      $("userHazards").innerHTML = `
-        <table style="width:100%;border-collapse:collapse;">
-          <tr><td><b>Hazard Type</b></td><td>${j.report.type}</td></tr>
-          <tr><td><b>Description</b></td><td>${j.report.description}</td></tr>
-          <tr><td><b>Reported At</b></td><td>${reportedAt}</td></tr>
-          <tr><td><b>Location</b></td><td>${j.report.location}<br>
-            <small>Lat:${j.report.latitude}, Lon:${j.report.longitude}</small></td></tr>
-          <tr><td><b>Status</b></td><td>${j.severity}</td></tr>
-        </table>
-      `;
-      alertUser(j.message);
-    });
+  }).then(r=>r.json()).then(j=>{
+    $("userHazards").innerHTML=`<b>${j.report.type}</b> — ${j.report.description}`;
+    alertUser(j.message);
   });
+});
+
+/* CHAT */
+$("chatSend").onclick=async()=>{
+  const msg=$("chatInput").value;
+  if(!msg) return;
+  $("chatLog").innerHTML+=`<div><b>You:</b> ${msg}</div>`;
+  const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:msg})});
+  const j=await r.json();
+  $("chatLog").innerHTML+=`<div><b>Bot:</b> ${j.reply}</div>`;
+  $("chatInput").value="";
 };
 
-/* CHAT, SOUND, CHART, EXPLAINABILITY, INSIGHTS — UNCHANGED */
-/* (All existing logic remains exactly the same) */
+/* ===== UTILITIES ===== */
+function drawSimpleChart(id,val,max){
+  const c=$(id),ctx=c.getContext("2d");
+  c.width=c.parentElement.clientWidth-20;
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle="#60a5fa";
+  ctx.fillRect(0,c.height-(val/max)*c.height,c.width,(val/max)*c.height);
+}
+
+function updateExplainability(j){
+  const el=$("explainList"); el.innerHTML="";
+  if(j.heat_index>=40) el.innerHTML+="<li>Heat index is dangerously high.</li>";
+  if(j.oxygen_percent<=19) el.innerHTML+="<li>Low oxygen due to altitude.</li>";
+  if(!el.innerHTML) el.innerHTML="<li>All conditions are safe.</li>";
+}
+
+function updateInsights(j){
+  const el=$("insightsList"); el.innerHTML="";
+  if(persona==="worker" && j.noise_status==="DANGEROUS") el.innerHTML+="<li>Use hearing protection.</li>";
+  if(persona==="traveler" && j.oxygen_percent<=19) el.innerHTML+="<li>Risk of altitude sickness.</li>";
+  if(!el.innerHTML) el.innerHTML="<li>No health risks detected.</li>";
+}
+
+/* SOUND */
+let audioCtx,analyser,data,anim;
+$("startMic").onclick=async()=>{
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  audioCtx=new AudioContext();
+  analyser=audioCtx.createAnalyser();
+  analyser.fftSize=256;
+  audioCtx.createMediaStreamSource(stream).connect(analyser);
+  data=new Uint8Array(analyser.fftSize);
+  $("startMic").disabled=true;
+  $("stopMic").disabled=false;
+  soundLoop();
+};
+$("stopMic").onclick=()=>{
+  cancelAnimationFrame(anim);
+  audioCtx.close();
+  $("startMic").disabled=false;
+  $("stopMic").disabled=true;
+};
+function soundLoop(){
+  analyser.getByteTimeDomainData(data);
+  let sum=0;
+  data.forEach(v=>sum+=(v-128)**2);
+  const db=Math.round(20*Math.log10(Math.sqrt(sum/data.length))+100);
+  $("liveDb").textContent=db;
+  $("safeTime").textContent=db<85?"Safe":"Limit Exposure";
+  $("noiseMsg").textContent=db>=90?"⚠ Dangerous noise!":"";
+  anim=requestAnimationFrame(soundLoop);
+}
 
 });
 </script>
