@@ -48,14 +48,24 @@
   <button id="alertOk">OK</button>
 </div>
 
+<!-- AREA RISK ALERT (NEW) -->
+<div id="areaRiskBanner" style="display:none; background:#dc2626; color:white; padding:10px; margin-bottom:15px; border-radius:8px;">
+  ⚠ A hazard has been reported in your area. Please exercise extreme caution.
+</div>
+
 <!-- SAFETY TOOLS -->
 <div id="safety-tools" class="grid">
 
 <section class="card">
   <h2>📢 Report Hazard</h2>
-  <input id="hazType" placeholder="Hazard Type">
+  <input id="hazType" placeholder="Hazard Type (Fire, Gas, Chemical)">
   <input id="hazDesc" placeholder="Description">
   <button id="hazBtn">Submit</button>
+</section>
+
+<section class="card">
+  <h2>📍 Your Reported Hazards</h2>
+  <ul id="userHazards"></ul>
 </section>
 
 <section class="card">
@@ -169,6 +179,13 @@ async function callApi(params){
   updateExplainability(j);
   updateInsights(j);
 
+  // NEW: AREA RISK WARNING
+  if (j.area_risk === "HIGH") {
+    $("areaRiskBanner").style.display = "block";
+  } else {
+    $("areaRiskBanner").style.display = "none";
+  }
+
   status.textContent = "Updated";
 }
 
@@ -177,15 +194,39 @@ $("btnGet").onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat
 $("btnManual").onclick=()=>callApi({city:$("city").value});
 $("btnPdf").onclick=()=>location.href="/api/download_report";
 
-/* ===== HAZARD ===== */
+/* ===== HAZARD REPORTING (EXTENDED) ===== */
 $("hazBtn").onclick=async()=>{
+  const payload = {
+    type: $("hazType").value,
+    description: $("hazDesc").value,
+    location: $("city").value
+  };
+
+  if (!payload.type || !payload.description) {
+    alertUser("Please fill all hazard details");
+    return;
+  }
+
   const r = await fetch("/api/report_hazard",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({type:$("hazType").value,description:$("hazDesc").value})
+    body:JSON.stringify(payload)
   });
+
   const j = await r.json();
-  alertUser(j.message);
+
+  $("userHazards").innerHTML += `
+    <li>
+      <b>${j.report.type}</b> — ${j.report.description}
+      <br><small>${j.report.location} | Severity: ${j.severity}</small>
+    </li>
+  `;
+
+  if (j.escalated) {
+    alertUser("🚨 CRITICAL HAZARD! Emergency escalation activated.");
+  } else {
+    alertUser(j.message);
+  }
 };
 
 /* ===== CHAT ===== */
@@ -240,7 +281,6 @@ function updateExplainability(j){
   const el=$("explainList"); el.innerHTML="";
   if(j.heat_level?.toLowerCase().includes("danger")) el.innerHTML+="<li>Heat index exceeds safe limits.</li>";
   if(j.oxygen_percent<=19) el.innerHTML+="<li>Low oxygen detected due to altitude.</li>";
-  if(!$("liveDb").textContent || $("liveDb").textContent<80){} 
   if(!el.innerHTML) el.innerHTML="<li>All parameters are within safe limits.</li>";
 }
 
