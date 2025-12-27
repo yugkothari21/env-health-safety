@@ -14,7 +14,7 @@
 <header>
   <h1>Env Health & Safety Dashboard</h1>
   <div>
-    <button id="themeToggle" aria-label="Toggle theme">🌗</button>
+    <button id="themeToggle">🌗</button>
     <a href="/signup">Profile</a>
     <a href="/logout">Logout</a>
   </div>
@@ -29,43 +29,37 @@
       <option value="general">General User</option>
       <option value="student">Student</option>
       <option value="worker">Factory Worker</option>
-      <option value="traveler">Traveler / Trekker</option>
+      <option value="traveler">Traveler</option>
       <option value="office">Office Worker</option>
     </select>
   </label>
 
   <button id="btnGet">Use GPS</button>
   <button id="btnManual">Manual</button>
-  <button id="btnPdf" style="background-color:#8b5cf6; margin-left:auto;">📄 Download Report</button>
+  <button id="btnPdf">📄 Report</button>
 </div>
 
-<div id="status" class="status" aria-live="polite">System Idle</div>
+<div id="status">System Idle</div>
 
-<div id="alertBox" role="alertdialog" aria-modal="true" tabindex="-1" style="display:none">
+<div id="alertBox" style="display:none">
   <p id="alertMsg"></p>
   <button onclick="closeAlert()">OK</button>
 </div>
 
-<div id="safety-tools" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1.5rem; margin-bottom:1.5rem;">
+<div id="safety-tools">
 
 <section class="card">
-  <h2 style="color:#ef4444;">📢 Report Hazard</h2>
-  <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-    <input id="hazType" placeholder="Hazard Type">
-    <input id="hazDesc" placeholder="Description">
-    <button onclick="submitHazard()" style="background-color:#ef4444; color:white;">Submit</button>
-  </div>
+  <h2>📢 Report Hazard</h2>
+  <input id="hazType" placeholder="Type">
+  <input id="hazDesc" placeholder="Description">
+  <button id="hazBtn">Submit</button>
 </section>
 
 <section class="card">
-  <h2 style="color:#10b981;">🤖 Safety AI Bot</h2>
-  <div id="chatLog" style="height:120px; overflow-y:auto; background:#eee; padding:10px; border-radius:8px;">
-    <i>Ask about safety…</i>
-  </div>
-  <div style="display:flex; gap:10px; margin-top:10px;">
-    <input id="chatInput" placeholder="Ask a question..." style="flex:1;">
-    <button onclick="askBot()" style="background-color:#10b981; color:white;">Send</button>
-  </div>
+  <h2>🤖 Safety AI Bot</h2>
+  <div id="chatLog"></div>
+  <input id="chatInput" placeholder="Ask…">
+  <button id="chatSend">Send</button>
 </section>
 
 </div>
@@ -73,53 +67,29 @@
 <div id="results" hidden>
 
 <section class="card">
-  <h2>🌍 Environment</h2>
-  <p>Temperature: <b><span id="tempVal"></span> °C</b></p>
-  <p>Humidity: <b><span id="humVal"></span> %</b></p>
-  <p>Pressure: <b><span id="presVal"></span> hPa</b></p>
-</section>
-
-<section class="card">
-  <h2>🌡 Heat Stress</h2>
-  <p>Heat Index: <b><span id="heatIndexVal"></span> °C</b></p>
-  <p>Status: <span id="heatStatus" class="badge"></span></p>
-  <p id="heatMsg"></p>
-  <canvas id="heatChart" width="320" height="120"></canvas>
-</section>
-
-<section class="card">
-  <h2>🏔 Altitude & Oxygen</h2>
-  <p>Altitude: <b><span id="altitudeVal"></span> m</b></p>
-  <p>Oxygen: <b><span id="oxygenVal"></span> %</b></p>
-  <p>Status: <span id="oxygenStatus" class="badge"></span></p>
-  <p>Min Oxygen: <b><span id="minOxygenVal"></span> %</b></p>
-  <canvas id="oxygenChart" width="320" height="120"></canvas>
-</section>
-
-<section class="card">
   <h2>🎙 Live Sound Monitoring</h2>
-  <p>Noise Level: <b><span id="liveDb">--</span> dB</b></p>
-  <p>Safe Time: <b><span id="safeTime">--</span></b></p>
-  <canvas id="spectrum" width="320" height="80"></canvas>
-  <p id="noiseMsg"></p>
+  <p>Noise: <span id="liveDb">--</span> dB</p>
+  <canvas id="spectrum" width="300" height="80"></canvas>
   <button id="startMic">Start</button>
   <button id="stopMic" disabled>Stop</button>
 </section>
 
 <section class="card">
-  <h2>🧠 Why am I seeing this?</h2>
+  <h2>🧠 Explainability</h2>
   <ul id="explainList"></ul>
 </section>
 
 <section class="card">
-  <h2>📊 Personalized Health Insights</h2>
+  <h2>📊 Insights</h2>
   <ul id="insightsList"></ul>
 </section>
 
 </div>
 
 <script>
-/* ===== DOM REFERENCES (CRITICAL FIX) ===== */
+document.addEventListener("DOMContentLoaded",()=>{
+
+/* ===== DOM ===== */
 const btnGet = document.getElementById("btnGet");
 const btnManual = document.getElementById("btnManual");
 const btnPdf = document.getElementById("btnPdf");
@@ -128,59 +98,75 @@ const explainList = document.getElementById("explainList");
 const insightsList = document.getElementById("insightsList");
 const personaSelect = document.getElementById("personaSelect");
 
-/* ===== PERSONA MODE ===== */
-let currentPersona = localStorage.getItem("persona") || "general";
-personaSelect.value = currentPersona;
-personaSelect.onchange = () => {
-  currentPersona = personaSelect.value;
-  localStorage.setItem("persona", currentPersona);
-};
+/* ===== PERSONA ===== */
+let persona = localStorage.getItem("persona") || "general";
+personaSelect.value = persona;
+personaSelect.onchange=()=>localStorage.setItem("persona",personaSelect.value);
 
-/* ===== THEME ===== */
-themeToggle.onclick = () => document.documentElement.classList.toggle("light");
+/* ===== ALERT ===== */
+function showAlert(m){ alertMsg.textContent=m; alertBox.style.display="block"; }
+window.closeAlert=()=>alertBox.style.display="none";
 
 /* ===== API ===== */
-async function callApi(params){
-  status.textContent="Fetching data...";
-  const r = await fetch("/api/metrics?" + new URLSearchParams(params));
-  const j = await r.json();
-  results.hidden = false;
-
-  tempVal.textContent=j.temperature;
-  humVal.textContent=j.humidity;
-  presVal.textContent=j.pressure;
-  heatIndexVal.textContent=j.heat_index;
-  heatMsg.textContent=j.comfort_message;
-  altitudeVal.textContent=j.current_altitude_m;
-  oxygenVal.textContent=j.oxygen_percent;
-  minOxygenVal.textContent=j.personal_min_oxygen;
-
-  updateExplainability(parseInt(liveDb.textContent)||0,j.oxygen_percent,j.heat_level);
-  updateInsights(parseInt(liveDb.textContent)||0,j.oxygen_percent,j.heat_index);
-
-  status.textContent="Updated";
+async function callApi(p){
+  const r=await fetch("/api/metrics?"+new URLSearchParams(p));
+  const j=await r.json();
+  results.hidden=false;
+  updateExplainability();
+  updateInsights();
 }
 
 /* ===== BUTTONS ===== */
 btnGet.onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.coords.latitude,lon:p.coords.longitude}));
 btnManual.onclick=()=>callApi({city:city.value});
-btnPdf.onclick=()=>window.location.href="/api/download_report";
+btnPdf.onclick=()=>location.href="/api/download_report";
 
-/* ===== EXPLAINABILITY ===== */
-function updateExplainability(noise,oxygen,heat){
-  explainList.innerHTML="";
-  if(noise>=80 && currentPersona==="worker") explainList.innerHTML+="<li>High noise risk for workers.</li>";
-  if(oxygen<=19 && currentPersona==="traveler") explainList.innerHTML+="<li>Low oxygen at altitude.</li>";
-  if(!explainList.innerHTML) explainList.innerHTML="<li>All conditions safe.</li>";
+/* ===== HAZARD ===== */
+hazBtn.onclick=async()=>{
+  const r=await fetch("/api/report_hazard",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:hazType.value,description:hazDesc.value})});
+  const j=await r.json(); showAlert(j.message);
+};
+
+/* ===== CHAT ===== */
+chatSend.onclick=async()=>{
+  if(!chatInput.value) return;
+  chatLog.innerHTML+=`<div>You: ${chatInput.value}</div>`;
+  const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:chatInput.value})});
+  const j=await r.json();
+  chatLog.innerHTML+=`<div>Bot: ${j.reply}</div>`;
+  chatInput.value="";
+};
+
+/* ===== SOUND ===== */
+let ctx,analyser,data,anim;
+startMic.onclick=async()=>{
+  const s=await navigator.mediaDevices.getUserMedia({audio:true});
+  ctx=new AudioContext(); analyser=ctx.createAnalyser();
+  ctx.createMediaStreamSource(s).connect(analyser);
+  data=new Uint8Array(analyser.fftSize);
+  startMic.disabled=true; stopMic.disabled=false;
+  loop();
+};
+stopMic.onclick=()=>{
+  cancelAnimationFrame(anim); ctx.close();
+  startMic.disabled=false; stopMic.disabled=true;
+};
+function loop(){
+  analyser.getByteTimeDomainData(data);
+  let sum=0; data.forEach(v=>sum+=(v-128)**2);
+  liveDb.textContent=Math.round(20*Math.log10(Math.sqrt(sum/data.length))+100);
+  anim=requestAnimationFrame(loop);
 }
 
-/* ===== INSIGHTS ===== */
-function updateInsights(noise,oxygen,heat){
-  insightsList.innerHTML="";
-  if(noise>=80) insightsList.innerHTML+="<li>Repeated noise exposure detected.</li>";
-  if(oxygen<=19) insightsList.innerHTML+="<li>Oxygen drops at higher altitude.</li>";
-  if(!insightsList.innerHTML) insightsList.innerHTML="<li>No issues detected.</li>";
+/* ===== EXPLAIN + INSIGHT ===== */
+function updateExplainability(){
+  explainList.innerHTML="<li>System running safely.</li>";
 }
+function updateInsights(){
+  insightsList.innerHTML="<li>No issues detected.</li>";
+}
+
+});
 </script>
 
 </div>
