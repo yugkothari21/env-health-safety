@@ -48,7 +48,7 @@
   <button id="alertOk">OK</button>
 </div>
 
-<!-- AREA RISK ALERT (NEW) -->
+<!-- AREA RISK ALERT -->
 <div id="areaRiskBanner" style="display:none; background:#dc2626; color:white; padding:10px; margin-bottom:15px; border-radius:8px;">
   ⚠ A hazard has been reported in your area. Please exercise extreme caution.
 </div>
@@ -64,8 +64,10 @@
 </section>
 
 <section class="card">
-  <h2>📍 Your Reported Hazards</h2>
-  <ul id="userHazards"></ul>
+  <h2>📍 Your Reported Hazard</h2>
+  <div id="userHazards">
+    <p style="color:#6b7280;font-size:0.9rem;">No hazard reported yet.</p>
+  </div>
 </section>
 
 <section class="card">
@@ -131,14 +133,13 @@
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
-/* ===== HELPERS ===== */
 const $ = id => document.getElementById(id);
 const status = $("status");
 
-/* ===== THEME ===== */
+/* THEME */
 $("themeToggle").onclick=()=>document.documentElement.classList.toggle("light");
 
-/* ===== PERSONA ===== */
+/* PERSONA */
 let persona = localStorage.getItem("persona") || "general";
 $("personaSelect").value = persona;
 $("personaSelect").onchange = e => {
@@ -146,14 +147,14 @@ $("personaSelect").onchange = e => {
   localStorage.setItem("persona", persona);
 };
 
-/* ===== ALERT ===== */
+/* ALERT */
 $("alertOk").onclick=()=>$("alertBox").style.display="none";
 function alertUser(msg){
   $("alertMsg").textContent = msg;
   $("alertBox").style.display = "block";
 }
 
-/* ===== API ===== */
+/* API */
 async function callApi(params){
   status.textContent = "Fetching data...";
   const r = await fetch("/api/metrics?" + new URLSearchParams(params));
@@ -163,11 +164,9 @@ async function callApi(params){
   $("tempVal").textContent = j.temperature;
   $("humVal").textContent = j.humidity;
   $("presVal").textContent = j.pressure;
-
   $("heatIndexVal").textContent = j.heat_index;
   $("heatMsg").textContent = j.comfort_message;
   $("heatStatus").textContent = j.heat_level;
-
   $("altitudeVal").textContent = j.current_altitude_m;
   $("oxygenVal").textContent = j.oxygen_percent;
   $("minOxygenVal").textContent = j.personal_min_oxygen;
@@ -179,22 +178,17 @@ async function callApi(params){
   updateExplainability(j);
   updateInsights(j);
 
-  // NEW: AREA RISK WARNING
-  if (j.area_risk === "HIGH") {
-    $("areaRiskBanner").style.display = "block";
-  } else {
-    $("areaRiskBanner").style.display = "none";
-  }
+  $("areaRiskBanner").style.display = j.area_risk === "HIGH" ? "block" : "none";
 
   status.textContent = "Updated";
 }
 
-/* ===== BUTTONS ===== */
+/* BUTTONS */
 $("btnGet").onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.coords.latitude,lon:p.coords.longitude}));
 $("btnManual").onclick=()=>callApi({city:$("city").value});
 $("btnPdf").onclick=()=>location.href="/api/download_report";
 
-/* ===== HAZARD REPORTING (EXTENDED) ===== */
+/* HAZARD REPORTING — FINAL FORMAT */
 $("hazBtn").onclick=async()=>{
   const payload = {
     type: $("hazType").value,
@@ -214,22 +208,26 @@ $("hazBtn").onclick=async()=>{
   });
 
   const j = await r.json();
+  const reportedAt = new Date().toLocaleString();
 
-  $("userHazards").innerHTML += `
-    <li>
-      <b>${j.report.type}</b> — ${j.report.description}
-      <br><small>${j.report.location} | Severity: ${j.severity}</small>
-    </li>
+  $("userHazards").innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+      <tr><td><b>Hazard Type</b></td><td>${j.report.type}</td></tr>
+      <tr><td><b>Description</b></td><td>${j.report.description}</td></tr>
+      <tr><td><b>Reported At</b></td><td>${reportedAt}</td></tr>
+      <tr><td><b>Reported By</b></td><td>Anonymous</td></tr>
+      <tr><td><b>Location</b></td><td>${j.report.location}</td></tr>
+      <tr><td><b>Status</b></td><td>${j.severity === "HIGH" ? "🚨 Critical / Escalated" : "New / Pending"}</td></tr>
+    </table>
   `;
 
-  if (j.escalated) {
-    alertUser("🚨 CRITICAL HAZARD! Emergency escalation activated.");
-  } else {
-    alertUser(j.message);
-  }
+  alertUser(j.severity === "HIGH"
+    ? "🚨 CRITICAL HAZARD! Emergency escalation activated."
+    : j.message
+  );
 };
 
-/* ===== CHAT ===== */
+/* CHAT */
 $("chatSend").onclick=async()=>{
   const msg = $("chatInput").value.trim();
   if(!msg) return;
@@ -240,7 +238,7 @@ $("chatSend").onclick=async()=>{
   $("chatInput").value="";
 };
 
-/* ===== SOUND ===== */
+/* SOUND */
 let audioCtx, analyser, data, anim;
 $("startMic").onclick=async()=>{
   const stream = await navigator.mediaDevices.getUserMedia({audio:true});
@@ -267,7 +265,7 @@ function soundLoop(){
   anim=requestAnimationFrame(soundLoop);
 }
 
-/* ===== CHART ===== */
+/* CHART */
 function drawSimpleChart(id,val,max){
   const c=$(id),ctx=c.getContext("2d");
   c.width=c.parentElement.clientWidth-20;
@@ -276,7 +274,7 @@ function drawSimpleChart(id,val,max){
   ctx.fillRect(0,c.height-(val/max)*c.height,c.width,(val/max)*c.height);
 }
 
-/* ===== EXPLAINABILITY ===== */
+/* EXPLAINABILITY */
 function updateExplainability(j){
   const el=$("explainList"); el.innerHTML="";
   if(j.heat_level?.toLowerCase().includes("danger")) el.innerHTML+="<li>Heat index exceeds safe limits.</li>";
@@ -284,7 +282,7 @@ function updateExplainability(j){
   if(!el.innerHTML) el.innerHTML="<li>All parameters are within safe limits.</li>";
 }
 
-/* ===== INSIGHTS ===== */
+/* INSIGHTS */
 function updateInsights(j){
   const el=$("insightsList"); el.innerHTML="";
   if(persona==="worker" && $("liveDb").textContent>=80) el.innerHTML+="<li>Workers should use hearing protection.</li>";
