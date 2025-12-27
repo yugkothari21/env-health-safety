@@ -14,7 +14,7 @@
 <header>
   <h1>Env Health & Safety Dashboard</h1>
   <div>
-    <button id="themeToggle" aria-label="Toggle theme">🌗</button>
+    <button id="themeToggle">🌗</button>
     <a href="/signup">Profile</a>
     <a href="/logout">Logout</a>
   </div>
@@ -37,7 +37,7 @@
 
   <button id="btnGet">Use GPS</button>
   <button id="btnManual">Manual</button>
-  <button id="btnPdf" style="background:#8b5cf6; margin-left:auto;">📄 Download Report</button>
+  <button id="btnPdf" style="background:#8b5cf6;margin-left:auto;">📄 Download Report</button>
 </div>
 
 <div id="status" class="status">System Idle</div>
@@ -49,20 +49,20 @@
 </div>
 
 <!-- SAFETY TOOLS -->
-<div id="safety-tools" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-bottom:1.5rem;">
+<div id="safety-tools" class="grid">
 
 <section class="card">
   <h2>📢 Report Hazard</h2>
-  <input id="hazType" placeholder="Hazard type">
+  <input id="hazType" placeholder="Hazard Type">
   <input id="hazDesc" placeholder="Description">
   <button id="hazBtn">Submit</button>
 </section>
 
 <section class="card">
   <h2>🤖 Safety AI Bot</h2>
-  <div id="chatLog" style="height:120px;overflow-y:auto;background:#eee;padding:10px;border-radius:8px;font-size:0.9rem;"></div>
-  <div style="display:flex;gap:10px;margin-top:10px;">
-    <input id="chatInput" placeholder="Ask a safety question..." style="flex:1;">
+  <div id="chatLog" class="chat-box"></div>
+  <div class="chat-input">
+    <input id="chatInput" placeholder="Ask a safety question...">
     <button id="chatSend">Send</button>
   </div>
 </section>
@@ -84,7 +84,7 @@
   <p>Heat Index: <b><span id="heatIndexVal"></span> °C</b></p>
   <p>Status: <span id="heatStatus" class="badge"></span></p>
   <p id="heatMsg"></p>
-  <canvas id="heatChart" width="320" height="120"></canvas>
+  <canvas id="heatChart" height="120"></canvas>
 </section>
 
 <section class="card">
@@ -93,21 +93,21 @@
   <p>Oxygen: <b><span id="oxygenVal"></span> %</b></p>
   <p>Status: <span id="oxygenStatus" class="badge"></span></p>
   <p>Personal Min Oxygen: <b><span id="minOxygenVal"></span> %</b></p>
-  <canvas id="oxygenChart" width="320" height="120"></canvas>
+  <canvas id="oxygenChart" height="120"></canvas>
 </section>
 
 <section class="card">
   <h2>🎙 Live Sound Monitoring</h2>
   <p>Noise Level: <b><span id="liveDb">--</span> dB</b></p>
   <p>Safe Exposure Time: <b><span id="safeTime">--</span></b></p>
-  <canvas id="spectrum" width="320" height="80"></canvas>
+  <canvas id="spectrum" height="80"></canvas>
   <p id="noiseMsg"></p>
   <button id="startMic">Start</button>
   <button id="stopMic" disabled>Stop</button>
 </section>
 
 <section class="card">
-  <h2>🧠 Why am I seeing this?</h2>
+  <h2>🧠 Explainability</h2>
   <ul id="explainList"></ul>
 </section>
 
@@ -121,110 +121,135 @@
 <script>
 document.addEventListener("DOMContentLoaded",()=>{
 
-/* ===== DOM ===== */
+/* ===== HELPERS ===== */
 const $ = id => document.getElementById(id);
-const btnGet=$("btnGet"), btnManual=$("btnManual"), btnPdf=$("btnPdf");
-const startMic=$("startMic"), stopMic=$("stopMic");
-const liveDb=$("liveDb"), safeTime=$("safeTime"), spectrum=$("spectrum");
-const explainList=$("explainList"), insightsList=$("insightsList");
-const personaSelect=$("personaSelect");
+const status = $("status");
 
 /* ===== THEME ===== */
 $("themeToggle").onclick=()=>document.documentElement.classList.toggle("light");
 
 /* ===== PERSONA ===== */
-let persona=localStorage.getItem("persona")||"general";
-personaSelect.value=persona;
-personaSelect.onchange=()=>localStorage.setItem("persona",personaSelect.value);
+let persona = localStorage.getItem("persona") || "general";
+$("personaSelect").value = persona;
+$("personaSelect").onchange = e => {
+  persona = e.target.value;
+  localStorage.setItem("persona", persona);
+};
 
 /* ===== ALERT ===== */
 $("alertOk").onclick=()=>$("alertBox").style.display="none";
-function showAlert(m){ $("alertMsg").textContent=m; $("alertBox").style.display="block"; }
+function alertUser(msg){
+  $("alertMsg").textContent = msg;
+  $("alertBox").style.display = "block";
+}
 
 /* ===== API ===== */
-async function callApi(p){
-  $("status").textContent="Fetching data...";
-  const r=await fetch("/api/metrics?"+new URLSearchParams(p));
-  const j=await r.json();
-  $("results").hidden=false;
+async function callApi(params){
+  status.textContent = "Fetching data...";
+  const r = await fetch("/api/metrics?" + new URLSearchParams(params));
+  const j = await r.json();
+  $("results").hidden = false;
 
-  $("tempVal").textContent=j.temperature;
-  $("humVal").textContent=j.humidity;
-  $("presVal").textContent=j.pressure;
-  $("heatIndexVal").textContent=j.heat_index;
-  $("heatMsg").textContent=j.comfort_message;
-  $("altitudeVal").textContent=j.current_altitude_m;
-  $("oxygenVal").textContent=j.oxygen_percent;
-  $("minOxygenVal").textContent=j.personal_min_oxygen;
+  $("tempVal").textContent = j.temperature;
+  $("humVal").textContent = j.humidity;
+  $("presVal").textContent = j.pressure;
+
+  $("heatIndexVal").textContent = j.heat_index;
+  $("heatMsg").textContent = j.comfort_message;
+  $("heatStatus").textContent = j.heat_level;
+
+  $("altitudeVal").textContent = j.current_altitude_m;
+  $("oxygenVal").textContent = j.oxygen_percent;
+  $("minOxygenVal").textContent = j.personal_min_oxygen;
+  $("oxygenStatus").textContent = j.oxygen_status;
+
+  drawSimpleChart("heatChart", j.heat_index, 60);
+  drawSimpleChart("oxygenChart", j.oxygen_percent, 25);
 
   updateExplainability(j);
   updateInsights(j);
 
-  $("status").textContent="Updated";
+  status.textContent = "Updated";
 }
 
 /* ===== BUTTONS ===== */
-btnGet.onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.coords.latitude,lon:p.coords.longitude}));
-btnManual.onclick=()=>callApi({city:$("city").value});
-btnPdf.onclick=()=>location.href="/api/download_report";
+$("btnGet").onclick=()=>navigator.geolocation.getCurrentPosition(p=>callApi({lat:p.coords.latitude,lon:p.coords.longitude}));
+$("btnManual").onclick=()=>callApi({city:$("city").value});
+$("btnPdf").onclick=()=>location.href="/api/download_report";
 
 /* ===== HAZARD ===== */
 $("hazBtn").onclick=async()=>{
-  const r=await fetch("/api/report_hazard",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:$("hazType").value,description:$("hazDesc").value})});
-  const j=await r.json(); showAlert(j.message);
+  const r = await fetch("/api/report_hazard",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({type:$("hazType").value,description:$("hazDesc").value})
+  });
+  const j = await r.json();
+  alertUser(j.message);
 };
 
 /* ===== CHAT ===== */
 $("chatSend").onclick=async()=>{
-  if(!$("chatInput").value.trim())return;
-  $("chatLog").innerHTML+=`<div><b>You:</b> ${$("chatInput").value}</div>`;
-  const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:$("chatInput").value})});
-  const j=await r.json();
-  $("chatLog").innerHTML+=`<div><b>Bot:</b> ${j.reply}</div>`;
+  const msg = $("chatInput").value.trim();
+  if(!msg) return;
+  $("chatLog").innerHTML += `<div><b>You:</b> ${msg}</div>`;
+  const r = await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:msg})});
+  const j = await r.json();
+  $("chatLog").innerHTML += `<div><b>Bot:</b> ${j.reply}</div>`;
   $("chatInput").value="";
 };
 
 /* ===== SOUND ===== */
-let ctx,analyser,data,anim;
-startMic.onclick=async()=>{
-  const s=await navigator.mediaDevices.getUserMedia({audio:true});
-  ctx=new AudioContext();
-  analyser=ctx.createAnalyser();
-  ctx.createMediaStreamSource(s).connect(analyser);
-  data=new Uint8Array(analyser.fftSize);
-  startMic.disabled=true; stopMic.disabled=false;
-  loop();
+let audioCtx, analyser, data, anim;
+$("startMic").onclick=async()=>{
+  const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+  audioCtx = new AudioContext();
+  analyser = audioCtx.createAnalyser();
+  audioCtx.createMediaStreamSource(stream).connect(analyser);
+  data = new Uint8Array(analyser.fftSize);
+  $("startMic").disabled=true; $("stopMic").disabled=false;
+  soundLoop();
 };
-stopMic.onclick=()=>{cancelAnimationFrame(anim);ctx.close();startMic.disabled=false;stopMic.disabled=true;}
-function loop(){
+$("stopMic").onclick=()=>{
+  cancelAnimationFrame(anim);
+  audioCtx.close();
+  $("startMic").disabled=false; $("stopMic").disabled=true;
+};
+function soundLoop(){
   analyser.getByteTimeDomainData(data);
-  let sum=0;data.forEach(v=>sum+=(v-128)**2);
-  const db=Math.round(20*Math.log10(Math.sqrt(sum/data.length))+100);
-  liveDb.textContent=db;
-  safeTime.textContent=db<85?"Safe":"Limit exposure";
-  anim=requestAnimationFrame(loop);
+  let sum=0;
+  data.forEach(v=>sum+=(v-128)*(v-128));
+  const db = Math.round(20*Math.log10(Math.sqrt(sum/data.length))+100);
+  $("liveDb").textContent=db;
+  $("safeTime").textContent = db<85 ? "Safe" : "Limit exposure";
+  $("noiseMsg").textContent = db>=90 ? "⚠ Dangerous noise!" : "";
+  anim=requestAnimationFrame(soundLoop);
+}
+
+/* ===== CHART ===== */
+function drawSimpleChart(id,val,max){
+  const c=$(id),ctx=c.getContext("2d");
+  c.width=c.parentElement.clientWidth-20;
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle="#60a5fa";
+  ctx.fillRect(0,c.height-(val/max)*c.height,c.width,(val/max)*c.height);
 }
 
 /* ===== EXPLAINABILITY ===== */
 function updateExplainability(j){
-  explainList.innerHTML="";
-  if(j.heat_level?.toLowerCase().includes("danger"))
-    explainList.innerHTML+="<li>High heat stress detected.</li>";
-  if(j.oxygen_percent<=19)
-    explainList.innerHTML+="<li>Low oxygen at current altitude.</li>";
-  if(!explainList.innerHTML)
-    explainList.innerHTML="<li>All parameters within safe limits.</li>";
+  const el=$("explainList"); el.innerHTML="";
+  if(j.heat_level?.toLowerCase().includes("danger")) el.innerHTML+="<li>Heat index exceeds safe limits.</li>";
+  if(j.oxygen_percent<=19) el.innerHTML+="<li>Low oxygen detected due to altitude.</li>";
+  if(!$("liveDb").textContent || $("liveDb").textContent<80){} 
+  if(!el.innerHTML) el.innerHTML="<li>All parameters are within safe limits.</li>";
 }
 
 /* ===== INSIGHTS ===== */
 function updateInsights(j){
-  insightsList.innerHTML="";
-  if(persona==="worker" && liveDb.textContent>=80)
-    insightsList.innerHTML+="<li>Workers should use hearing protection.</li>";
-  if(persona==="traveler" && j.oxygen_percent<=19)
-    insightsList.innerHTML+="<li>Travelers may face altitude sickness.</li>";
-  if(!insightsList.innerHTML)
-    insightsList.innerHTML="<li>No concerning trends detected.</li>";
+  const el=$("insightsList"); el.innerHTML="";
+  if(persona==="worker" && $("liveDb").textContent>=80) el.innerHTML+="<li>Workers should use hearing protection.</li>";
+  if(persona==="traveler" && j.oxygen_percent<=19) el.innerHTML+="<li>Travelers may experience altitude sickness.</li>";
+  if(!el.innerHTML) el.innerHTML="<li>No concerning trends detected.</li>";
 }
 
 });
